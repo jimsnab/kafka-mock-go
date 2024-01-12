@@ -7,36 +7,36 @@ import (
 
 type (
 	kafkaDataStore struct {
-		mu sync.Mutex
+		mu     sync.Mutex
 		Topics map[string]*kafkaTopic
 	}
 
 	kafkaTopic struct {
-		mu sync.Mutex
+		mu         sync.Mutex
 		Partitions map[int32]*kafkaPartition
 	}
 
 	kafkaPartition struct {
-		mu sync.Mutex
+		mu                    sync.Mutex
 		Index                 int32
 		ErrorCode             int16
 		Timestamp             int64
 		Offset                int64
-		Records              []*kafkaRecord
+		Records               []*kafkaRecord
 		GroupCommittedOffsets map[string]int64
 		Metadata              NullableString
 	}
 
 	kafkaRecord struct {
 		Attributes int8
-		Timestamp int64
-		Key []byte
-		Value []byte
-		Headers []kafkaHeader
+		Timestamp  int64
+		Key        []byte
+		Value      []byte
+		Headers    []kafkaHeader
 	}
 
 	kafkaHeader struct {
-		HeaderKey string
+		HeaderKey   string
 		HeaderValue []byte
 	}
 )
@@ -76,7 +76,7 @@ func (kp *kafkaTopic) createPartition(number int32) *kafkaPartition {
 	if !exists {
 		partition = &kafkaPartition{
 			Index:                 number,
-			Records:              []*kafkaRecord{},
+			Records:               []*kafkaRecord{},
 			GroupCommittedOffsets: map[string]int64{},
 		}
 		kp.Partitions[number] = partition
@@ -104,16 +104,16 @@ func (kp *kafkaPartition) postRecord(attribs int8, ts time.Time, key, value []by
 	defer kp.mu.Unlock()
 
 	flatHeaders := make([]kafkaHeader, 0, len(headers))
-	for k,v := range headers {
+	for k, v := range headers {
 		flatHeaders = append(flatHeaders, kafkaHeader{HeaderKey: k, HeaderValue: v})
 	}
 
 	record := &kafkaRecord{
 		Attributes: attribs,
-		Timestamp: ts.UnixMilli(),
-		Key: key,
-		Value: value,
-		Headers: flatHeaders,
+		Timestamp:  ts.UnixMilli(),
+		Key:        key,
+		Value:      value,
+		Headers:    flatHeaders,
 	}
 	kp.Records = append(kp.Records, record)
 }

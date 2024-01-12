@@ -17,7 +17,7 @@ type (
 		port    int
 		oc      onClose
 		inbound []byte
-		ds *kafkaDataStore
+		ds      *kafkaDataStore
 	}
 
 	onClose func()
@@ -40,7 +40,7 @@ func newKafkaClient(l lane.Lane, ds *kafkaDataStore, conn net.Conn, port int, oc
 		port:    port,
 		oc:      oc,
 		inbound: []byte{},
-		ds: ds,
+		ds:      ds,
 	}
 
 	go kc.handle()
@@ -138,7 +138,7 @@ func (kc *kafkaClient) dispatcher(reader *bufio.Reader) (err error) {
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
 	encodeObject(w, response)
-	
+
 	if rtags != nil {
 		encodeTags(w, rtags)
 	}

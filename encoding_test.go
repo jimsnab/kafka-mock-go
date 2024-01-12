@@ -506,12 +506,12 @@ func TestEncodeDecodeStringUtil(t *testing.T) {
 func TestEncodeDecodeStringPartial(t *testing.T) {
 	var full bytes.Buffer
 	writer := bufio.NewWriter(&full)
-	encodeObject(writer, "test")	
+	encodeObject(writer, "test")
 	writer.Flush()
 
 	var buf bytes.Buffer
 	writer = bufio.NewWriter(&buf)
-	writer.Write(full.Bytes()[:full.Len() - 1])
+	writer.Write(full.Bytes()[:full.Len()-1])
 	writer.Flush()
 
 	reader := bufio.NewReader(&buf)
@@ -524,7 +524,7 @@ func TestEncodeDecodeStringPartial(t *testing.T) {
 func TestEncodeDecodeNullableString(t *testing.T) {
 	var buf bytes.Buffer
 	writer := bufio.NewWriter(&buf)
-	s := "test"	
+	s := "test"
 	encodeObject(writer, &s)
 	encodeObject(writer, &s)
 	writer.Flush()
@@ -724,7 +724,7 @@ func TestEncodeDecodeVarInt3(t *testing.T) {
 	writer.Flush()
 	if buf.Len() != 5 {
 		t.Error("min int should take five bytes")
-	}	
+	}
 
 	var zero VarInt
 	reader := bufio.NewReader(&buf)
@@ -860,7 +860,7 @@ func TestEncodeDecodeVarInt643(t *testing.T) {
 	writer.Flush()
 	if buf.Len() != 10 {
 		t.Error("min int 64 should take ten bytes")
-	}	
+	}
 
 	var zero VarInt64
 	reader := bufio.NewReader(&buf)
@@ -1205,7 +1205,7 @@ func TestEncodeDecodeCompactStringFromNullable(t *testing.T) {
 func TestEncodeDecodeCompactStringTag(t *testing.T) {
 	var buf bytes.Buffer
 	writer := bufio.NewWriter(&buf)
-	encodeObject(writer, compactString{A:"test"})
+	encodeObject(writer, compactString{A: "test"})
 	encodeObject(writer, compactString{A: "test2"})
 	writer.Flush()
 
@@ -1288,7 +1288,7 @@ func TestEncodeDecodeCompactNullableStringPartial(t *testing.T) {
 	encodeObject(writer, CompactNullableString(&s))
 	writer.Flush()
 
-	for i := 1 ; i < full.Len() - 1 ; i++ {
+	for i := 1; i < full.Len()-1; i++ {
 		var buf bytes.Buffer
 		writer = bufio.NewWriter(&buf)
 		writer.Write(full.Bytes()[:i])
@@ -1310,7 +1310,7 @@ func TestEncodeDecodeCompactNullableStringNilPartial(t *testing.T) {
 	encodeObject(writer, s)
 	writer.Flush()
 
-	for i := 1 ; i < full.Len() - 1 ; i++ {
+	for i := 1; i < full.Len()-1; i++ {
 		var buf bytes.Buffer
 		writer = bufio.NewWriter(&buf)
 		writer.Write(full.Bytes()[:i])
@@ -1439,7 +1439,7 @@ func TestEncodeDecodeNullableBytesPartial(t *testing.T) {
 	encodeObject(writer, NullableBytes(data))
 	writer.Flush()
 
-	for i := 1 ; i < full.Len() - 1 ; i++ {
+	for i := 1; i < full.Len()-1; i++ {
 		var buf bytes.Buffer
 		writer = bufio.NewWriter(&buf)
 		writer.Write(full.Bytes()[:i])
@@ -1450,7 +1450,7 @@ func TestEncodeDecodeNullableBytesPartial(t *testing.T) {
 		next, _ := peekObject(reader, 0, reflect.TypeOf(zero))
 		if next >= 0 {
 			t.Error("didn't expect a value")
-		}	
+		}
 	}
 }
 
@@ -1461,7 +1461,7 @@ func TestEncodeDecodeNullableBytesNilPartial(t *testing.T) {
 	encodeObject(writer, NullableBytes(data))
 	writer.Flush()
 
-	for i := 1 ; i < full.Len() - 1 ; i++ {
+	for i := 1; i < full.Len()-1; i++ {
 		var buf bytes.Buffer
 		writer = bufio.NewWriter(&buf)
 		writer.Write(full.Bytes()[:i])
@@ -1472,7 +1472,7 @@ func TestEncodeDecodeNullableBytesNilPartial(t *testing.T) {
 		next, _ := peekObject(reader, 0, reflect.TypeOf(zero))
 		if next >= 0 {
 			t.Error("didn't expect a value")
-		}	
+		}
 	}
 }
 
@@ -1590,7 +1590,7 @@ func TestEncodeDecodeCompactNullableBytesPartial(t *testing.T) {
 	encodeObject(writer, CompactNullableBytes(data))
 	writer.Flush()
 
-	for i := 1 ; i < full.Len() - 1 ; i++ {
+	for i := 1; i < full.Len()-1; i++ {
 		var buf bytes.Buffer
 		writer = bufio.NewWriter(&buf)
 		writer.Write(full.Bytes()[:i])
@@ -1601,7 +1601,7 @@ func TestEncodeDecodeCompactNullableBytesPartial(t *testing.T) {
 		next, _ := peekObject(reader, 0, reflect.TypeOf(zero))
 		if next >= 0 {
 			t.Error("didn't expect a value")
-		}	
+		}
 	}
 }
 
@@ -1612,7 +1612,7 @@ func TestEncodeDecodeCompactNullableBytesNilPartial(t *testing.T) {
 	encodeObject(writer, CompactNullableBytes(data))
 	writer.Flush()
 
-	for i := 1 ; i < full.Len() - 1 ; i++ {
+	for i := 1; i < full.Len()-1; i++ {
 		var buf bytes.Buffer
 		writer = bufio.NewWriter(&buf)
 		writer.Write(full.Bytes()[:i])
@@ -1623,7 +1623,7 @@ func TestEncodeDecodeCompactNullableBytesNilPartial(t *testing.T) {
 		next, _ := peekObject(reader, 0, reflect.TypeOf(zero))
 		if next >= 0 {
 			t.Error("didn't expect a value")
-		}	
+		}
 	}
 }
 
@@ -1727,7 +1727,7 @@ func TestEncodeDecodeArray(t *testing.T) {
 	if !reflect.DeepEqual(ref, a) {
 		t.Error("expected value match")
 	}
-	
+
 	next, _ = peekObject(reader, next, reflect.TypeOf(zero))
 	if next >= 0 {
 		t.Error("didn't expect a value")
@@ -1785,7 +1785,7 @@ func TestEncodeDecodeCompactArray(t *testing.T) {
 	if !reflect.DeepEqual(ref.A, a) {
 		t.Error("expected value match")
 	}
-	
+
 	next, _ = peekObject(reader, next, reflect.TypeOf(zero))
 	if next >= 0 {
 		t.Error("didn't expect a value")
@@ -1817,7 +1817,7 @@ func TestEncodeDecodeStruct(t *testing.T) {
 	}
 	ref := testStruct{
 		Value1: 123,
-		Value2: "test", 
+		Value2: "test",
 		Value3: []int16{5, 10, 15},
 		Value4: testValue{A: 4, B: 24},
 		Value5: &other,
@@ -1869,7 +1869,7 @@ func TestEncodeDecodeStructPartial(t *testing.T) {
 	}
 	ref := testStruct{
 		Value1: 123,
-		Value2: "test", 
+		Value2: "test",
 		Value3: []int16{5, 10, 15},
 		Value4: testValue{A: 4, B: 24},
 		Value5: &other,
@@ -1881,7 +1881,7 @@ func TestEncodeDecodeStructPartial(t *testing.T) {
 	encodeObject(writer, ref)
 	writer.Flush()
 
-	for i := 1 ; i < full.Len() - 1 ; i++ {
+	for i := 1; i < full.Len()-1; i++ {
 		var buf bytes.Buffer
 		writer = bufio.NewWriter(&buf)
 		writer.Write(full.Bytes()[:i])
@@ -1929,7 +1929,7 @@ func TestEncodeDecodeByteArray(t *testing.T) {
 	if !reflect.DeepEqual(ref, a) {
 		t.Error("expected value match")
 	}
-	
+
 	next, _ = peekObject(reader, next, reflect.TypeOf(zero))
 	if next >= 0 {
 		t.Error("didn't expect a value")
@@ -2007,7 +2007,7 @@ func TestEncodeDecodeTagsPartial(t *testing.T) {
 	encodeTags(writer, tags)
 	writer.Flush()
 
-	for i := 1 ; i < full.Len() - 1 ; i++ {
+	for i := 1; i < full.Len()-1; i++ {
 		var buf bytes.Buffer
 		writer = bufio.NewWriter(&buf)
 		writer.Write(full.Bytes()[:i])
@@ -2069,8 +2069,8 @@ func TestEncodeDecodeTagsForeign(t *testing.T) {
 		t.Error("expected a value")
 	}
 	expected := map[int]any{
-		1: []byte{0,4,116,101,115,116},
-		2: []byte{12,116,101,115,116,50},
+		1: []byte{0, 4, 116, 101, 115, 116},
+		2: []byte{12, 116, 101, 115, 116, 50},
 	}
 	if !reflect.DeepEqual(expected, tg) {
 		t.Error("expected tag match")
@@ -2080,8 +2080,8 @@ func TestEncodeDecodeTagsForeign(t *testing.T) {
 func TestEncodeDecodeApiVersions(t *testing.T) {
 	ref := apiVersionsResponseV0{
 		ApiKeys: []apiKeyV0{
-			{ ApiKey: 1, MinVersion: 0, MaxVersion: 1 },
-			{ ApiKey: 13, MinVersion: 1, MaxVersion: 6 },
+			{ApiKey: 1, MinVersion: 0, MaxVersion: 1},
+			{ApiKey: 13, MinVersion: 1, MaxVersion: 6},
 		},
 	}
 

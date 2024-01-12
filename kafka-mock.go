@@ -13,25 +13,25 @@ import (
 
 type (
 	KafkaMock struct {
-		mu sync.Mutex
-		l lane.Lane
-		wg sync.WaitGroup
+		mu       sync.Mutex
+		l        lane.Lane
+		wg       sync.WaitGroup
 		cancelFn context.CancelFunc
-		stopped atomic.Bool
-		port int
+		stopped  atomic.Bool
+		port     int
 		listener net.Listener
-		clients map[int]*kafkaClient
-		ds *kafkaDataStore
+		clients  map[int]*kafkaClient
+		ds       *kafkaDataStore
 	}
 )
 
 func NewKafkaMock(l lane.Lane, port int) *KafkaMock {
 	initializeApis()
 	return &KafkaMock{
-		l: l,
-		port:port,
+		l:       l,
+		port:    port,
 		clients: map[int]*kafkaClient{},
-		ds: newKafkaDataStore(),
+		ds:      newKafkaDataStore(),
 	}
 }
 
@@ -66,7 +66,7 @@ func (km *KafkaMock) RequestStop() {
 			km.listener = nil
 		}
 
-		for _,client := range km.clients {
+		for _, client := range km.clients {
 			km.l.Tracef("kafka mock server closing client %s", client.String())
 			client.Close()
 		}
@@ -75,7 +75,7 @@ func (km *KafkaMock) RequestStop() {
 
 func (km *KafkaMock) WaitForTermination() {
 	km.wg.Wait()
-	km.RequestStop()		// releases resources if not already released
+	km.RequestStop() // releases resources if not already released
 }
 
 func (km *KafkaMock) SimplePost(topic string, partition int, key, value []byte) {
@@ -122,7 +122,7 @@ func (km *KafkaMock) run(l lane.Lane) {
 			l.Tracef("client disconnected: %s <-> %s", connection.LocalAddr().String(), connection.RemoteAddr().String())
 			km.mu.Lock()
 			delete(km.clients, cxnNumber)
-			km.wg.Done()	
+			km.wg.Done()
 			km.mu.Unlock()
 		})
 		km.clients[cxnNumber] = kc

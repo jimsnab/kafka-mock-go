@@ -7,11 +7,11 @@ import (
 type (
 	offsetFetchRequestV1 struct {
 		GroupId string
-		Topics []offsetFetchRequestTopic
+		Topics  []offsetFetchRequestTopic
 	}
 
 	offsetFetchRequestTopic struct {
-		Name string
+		Name             string
 		PartitionIndexes []int32
 	}
 
@@ -39,13 +39,13 @@ func offsetFetchV1(reader *bufio.Reader, kc *kafkaClient, clientId string, tags 
 	}
 
 	data := map[string][]*kafkaPartition{}
-	for _,rt := range request.Topics {
+	for _, rt := range request.Topics {
 		kt := kc.ds.getTopic(rt.Name)
 		if kt == nil {
 			continue
 		}
 
-		for _,pi := range rt.PartitionIndexes {
+		for _, pi := range rt.PartitionIndexes {
 			par := kt.getPartition(pi)
 			if par != nil {
 				kps, exists := data[rt.Name]
@@ -61,12 +61,12 @@ func offsetFetchV1(reader *bufio.Reader, kc *kafkaClient, clientId string, tags 
 	rtopics := make([]offsetFetchTopicV1, 0, len(data))
 	for name, kps := range data {
 		rpars := make([]offsetFetchPartitionV1, 0, len(kps))
-		for _,kp := range kps {
+		for _, kp := range kps {
 			rpars = append(rpars, offsetFetchPartitionV1{
-				PartitionIndex: kp.Index,
+				PartitionIndex:  kp.Index,
 				CommittedOffset: kp.groupCommittedOffset(request.GroupId),
-				ErrorCode: kp.ErrorCode,
-				Metadata: kp.Metadata,
+				ErrorCode:       kp.ErrorCode,
+				Metadata:        kp.Metadata,
 			})
 		}
 		rtopics = append(rtopics, offsetFetchTopicV1{Name: name, Partitions: rpars})

@@ -6,11 +6,11 @@ import (
 
 type (
 	heartbeatRequestV0 struct {
-		GroupId string
+		GroupId      string
 		GenerationId int32
-		MemberId string
+		MemberId     string
 	}
-	
+
 	heartbeatResponseV0 struct {
 		ErrorCode int16
 	}

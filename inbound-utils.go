@@ -10,11 +10,11 @@ import (
 
 type (
 	kafkaField struct {
-		name string
-		docString string
-		valType reflect.Type
+		name            string
+		docString       string
+		valType         reflect.Type
 		hasDefaultValue bool
-		defaultValue any
+		defaultValue    any
 	}
 )
 
@@ -48,7 +48,7 @@ func readRequest[T any](reader *bufio.Reader) (obj *T, err error) {
 	if unfilled == nil {
 		err = fmt.Errorf("extra data %T", request)
 		return
-	}	
+	}
 
 	obj = &request
 	return

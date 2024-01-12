@@ -7,5 +7,7 @@ type (
 const (
 	Unknown kafkaErrorCode = iota - 1
 	NoError
+	OffsetOutOfRange
+	CorruptMessage
 	UnknownTopicOrPartition
 )

@@ -5,11 +5,43 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"math"
 	"reflect"
 	"sort"
 
 	"github.com/google/uuid"
+)
+
+type (
+	VarInt                int32
+	VarUint               uint32
+	VarInt64              int64
+	VarUint64             uint64
+	CompactString         string
+	NullableString        *string
+	CompactNullableString *CompactString
+	CompactBytes          []byte
+	NullableBytes         []byte
+	CompactNullableBytes  []byte
+	CompactArray          any
+
+	messageSetV1 struct {
+		msgs      []messageV1
+		offset    int64
+		totalSize int
+	}
+
+	messageV1 struct {
+		Offset      int64
+		MessageSize int32
+		Crc         int32
+		MagicByte   int8
+		Attributes  int8
+		Timestamp   int64
+		Key         []byte
+		Value       []byte
+	}
 )
 
 func encodeObject(writer *bufio.Writer, obj any) {
@@ -102,7 +134,12 @@ func encodeObjectWorker(writer *bufio.Writer, tt reflect.Type, obj any, nullable
 			}
 		}
 	case reflect.Struct:
-		encodeStruct(writer, reflect.ValueOf(obj))
+		if tt.Name() == "messageSetV1" {
+			msv1 := obj.(messageSetV1)
+			encodeMessageSetV1(writer, &msv1)
+		} else {
+			encodeStruct(writer, reflect.ValueOf(obj))
+		}
 	case reflect.Slice:
 		et := tt.Elem()
 		if et.Kind() == reflect.Uint8 {
@@ -139,6 +176,9 @@ func encodeObjectWorker(writer *bufio.Writer, tt reflect.Type, obj any, nullable
 			encodeCompactNullableString(writer, obj.(CompactNullableString))
 		} else if tt.Name() == "NullableString" {
 			encodeNullableString(writer, obj.(NullableString))
+		} else if tt.Name() == "messageSetV1" {
+			// message sets deviate from the normal wire data protocol
+			encodeMessageSetV1(writer, obj.(*messageSetV1))
 		} else {
 			v := reflect.ValueOf(obj)
 			if v.Kind() > 0 {
@@ -420,7 +460,7 @@ func encodeTags(writer *bufio.Writer, tags map[int]any) {
 	}
 	sort.Ints(ids)
 
-	for _,id := range ids {
+	for _, id := range ids {
 		tag := tags[id]
 		encodeVarUint(writer, VarUint(id))
 
@@ -434,10 +474,51 @@ func encodeTags(writer *bufio.Writer, tags map[int]any) {
 	}
 }
 
-func encodeMessage(obj any) []byte {
+func encodeMessageSetV1(writer *bufio.Writer, ms *messageSetV1) {
+	encodeObject(writer, ms.totalSize)
+	for _, msg := range ms.msgs {
+		encodeObject(writer, msg)
+	}
+}
+
+var crcTable *crc32.Table = crc32.MakeTable(crc32.Castagnoli)
+
+func newMessageSetV1(offset int64) *messageSetV1 {
+	return &messageSetV1{
+		offset: offset,
+		msgs:   []messageV1{},
+	}
+}
+
+func (msv1 *messageSetV1) appendMessage(record *kafkaRecord, maxSize int) bool {
+	mv1 := messageV1{
+		Offset:     msv1.offset,
+		MagicByte:  1,
+		Attributes: 0,
+		Timestamp:  record.Timestamp,
+		Key:        record.Key,
+		Value:      record.Value,
+	}
+	mv1.MessageSize = int32(34 + len(record.Key) + len(record.Value))
+	mv1.Crc = int32(mv1.crc())
+
+	newSize := msv1.totalSize + int(mv1.MessageSize)
+	if newSize > maxSize {
+		return false
+	}
+
+	msv1.totalSize += int(mv1.MessageSize)
+	msv1.offset++
+
+	msv1.msgs = append(msv1.msgs, mv1)
+	return true
+}
+
+func (mv1 *messageV1) crc() uint32 {
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
-	encodeObject(w, obj)
+	encodeObject(w, mv1)
 	w.Flush()
-	return buf.Bytes()
+
+	return crc32.Update(0, crcTable, buf.Bytes()[16:])
 }

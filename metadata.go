@@ -47,7 +47,7 @@ func metadataV1(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map
 	}
 
 	topics := make([]topicsV1, 0, len(request.Topics))
-	for _,t := range request.Topics {
+	for _, t := range request.Topics {
 		topics = append(topics, topicsV1{Name: t, Partitions: []partitionV1{{PartitionIndex: 2, LeaderId: kLeaderNode, ReplicaNodes: []int32{1}, IsrNodes: []int32{1}}}})
 	}
 
@@ -56,7 +56,7 @@ func metadataV1(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map
 			{NodeId: kLeaderNode, Host: "localhost", Port: int32(kc.port)},
 		},
 		ControllerId: 500,
-		Topics: topics,
+		Topics:       topics,
 	}
 	return
 }

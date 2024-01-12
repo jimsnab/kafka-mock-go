@@ -6,16 +6,16 @@ import (
 
 type (
 	joinGroupRequestV1 struct {
-		GroupId string
-		SessionTimeoutMs int32
+		GroupId            string
+		SessionTimeoutMs   int32
 		RebalanceTimeoutMs int32
-		MemberId string
-		ProtocolType string
-		Protocols []joinGroupProtocolV1
+		MemberId           string
+		ProtocolType       string
+		Protocols          []joinGroupProtocolV1
 	}
 
 	joinGroupProtocolV1 struct {
-		Name string
+		Name     string
 		Metadata []byte
 	}
 

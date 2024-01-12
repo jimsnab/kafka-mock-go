@@ -15,18 +15,6 @@ type (
 		packet bytes.Buffer
 		tags   map[int]any
 	}
-
-	VarInt                int32
-	VarUint               uint32
-	VarInt64              int64
-	VarUint64             uint64
-	CompactString         string
-	NullableString        *string
-	CompactNullableString *CompactString
-	CompactBytes          []byte
-	NullableBytes         []byte
-	CompactNullableBytes  []byte
-	CompactArray          any
 )
 
 func newKafkaResponse() *kafkaResponse {

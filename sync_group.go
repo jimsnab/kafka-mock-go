@@ -8,30 +8,30 @@ import (
 
 type (
 	syncGroupRequestV0 struct {
-		GroupId string
+		GroupId      string
 		GenerationId int32
-		MemberId string
-		Assignments []syncGroupRequestAssignmentV0
+		MemberId     string
+		Assignments  []syncGroupRequestAssignmentV0
 	}
 
 	syncGroupRequestAssignmentV0 struct {
-		MemberID string
+		MemberID    string
 		Assignments []byte
 	}
 
 	memberAssignment struct {
-		Version int16
+		Version              int16
 		PartitionAssignments []memberPartitionAssignment
-		UserData []byte
+		UserData             []byte
 	}
 
 	memberPartitionAssignment struct {
-		Topic string
+		Topic      string
 		Partitions []int32
 	}
 
 	syncGroupResponseV0 struct {
-		ErrorCode  int16
+		ErrorCode   int16
 		Assignments []byte
 	}
 )
@@ -56,9 +56,9 @@ func syncGroupV0(reader *bufio.Reader, kc *kafkaClient, clientId string, tags ma
 func makeMemberAssignment(ds *kafkaDataStore) []byte {
 	// assign all topics & partitions to this client
 	mpas := make([]memberPartitionAssignment, 0, len(ds.Topics))
-	for name,topic := range ds.Topics {
+	for name, topic := range ds.Topics {
 		pars := make([]int32, 0, len(topic.Partitions))
-		for _,par := range topic.Partitions {
+		for _, par := range topic.Partitions {
 			pars = append(pars, par.Index)
 		}
 
@@ -66,7 +66,7 @@ func makeMemberAssignment(ds *kafkaDataStore) []byte {
 	}
 
 	a := memberAssignment{
-		Version: 1,
+		Version:              1,
 		PartitionAssignments: mpas,
 	}
 

@@ -8,7 +8,7 @@ type (
 	findCoordinatorRequestV0 struct {
 		Key string
 	}
-	
+
 	findCoordinatorResponseV0 struct {
 		ErrorCode int16
 		NodeId    int32

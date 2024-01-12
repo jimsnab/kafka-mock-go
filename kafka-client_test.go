@@ -11,7 +11,7 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-func testCreateKafkaMockServer(t * testing.T, port int) (tl lane.TestingLane, mock *KafkaMock) {
+func testCreateKafkaMockServer(t *testing.T, port int) (tl lane.TestingLane, mock *KafkaMock) {
 	tl = lane.NewTestingLane(context.Background())
 	tl.WantDescendantEvents(true)
 	tl.AddTee(lane.NewLogLane(tl))
@@ -29,11 +29,11 @@ func testStopMockServer(t *testing.T, mock *KafkaMock) {
 
 func testKafkaConnect(t *testing.T, port int, topics []string) (reader *kafka.Reader) {
 	r := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:   []string{fmt.Sprintf("localhost:%d", port)},
-		GroupID: "kafka-mock",
-		GroupTopics: topics,
-		Partition: 0,
-		MaxBytes:  10e6, // 10MB
+		Brokers:        []string{fmt.Sprintf("localhost:%d", port)},
+		GroupID:        "kafka-mock",
+		GroupTopics:    topics,
+		Partition:      0,
+		MaxBytes:       10e6, // 10MB
 		CommitInterval: time.Second,
 	})
 
@@ -43,7 +43,7 @@ func testKafkaConnect(t *testing.T, port int, topics []string) (reader *kafka.Re
 
 func testCloseKafkaReader(t *testing.T, reader *kafka.Reader) {
 	if err := reader.Close(); err != nil {
-		t.Fatalf("kafka-feed: read close error: %v", err)			
+		t.Fatalf("kafka-feed: read close error: %v", err)
 	}
 }
 
@@ -75,8 +75,204 @@ func TestKafkaReadOne(t *testing.T) {
 
 	m, err := r.FetchMessage(tl)
 	if err != nil {
-		t.Fatalf("kafka-feed: read mesage error: %v", err)
+		t.Fatalf("kafka-feed: read message error: %v", err)
 	}
 
 	tl.Infof("fetched: %v", m)
+}
+
+func TestKafkaCommitOne(t *testing.T) {
+	tl, mock := testCreateKafkaMockServer(t, 21001)
+	defer testStopMockServer(t, mock)
+
+	mock.SimplePost("topic-a", 2, nil, []byte("test"))
+
+	r := testKafkaConnect(t, 21001, []string{"topic-a"})
+	defer testCloseKafkaReader(t, r)
+
+	m, err := r.FetchMessage(tl)
+	if err != nil {
+		t.Fatalf("kafka-feed: read message error: %v", err)
+	}
+
+	r.CommitMessages(tl, m)
+
+	tl.Infof("committed: %v", m)
+}
+
+func TestKafkaReadTwo(t *testing.T) {
+	tl, mock := testCreateKafkaMockServer(t, 21001)
+	defer testStopMockServer(t, mock)
+
+	mock.SimplePost("topic-a", 2, nil, []byte("test 1"))
+	mock.SimplePost("topic-a", 2, nil, []byte("test 2"))
+
+	r := testKafkaConnect(t, 21001, []string{"topic-a"})
+	defer testCloseKafkaReader(t, r)
+
+	m, err := r.FetchMessage(tl)
+	if err != nil {
+		t.Fatalf("kafka-feed: read message error: %v", err)
+	}
+
+	tl.Infof("fetched: %v", m)
+
+	m, err = r.FetchMessage(tl)
+	if err != nil {
+		t.Fatalf("kafka-feed: read message error: %v", err)
+	}
+
+	tl.Infof("fetched: %v", m)
+}
+
+func TestKafkaReadTwoTwice(t *testing.T) {
+	tl, mock := testCreateKafkaMockServer(t, 21001)
+	defer testStopMockServer(t, mock)
+
+	mock.SimplePost("topic-a", 2, nil, []byte("test 1"))
+	mock.SimplePost("topic-a", 2, nil, []byte("test 2"))
+
+	r := testKafkaConnect(t, 21001, []string{"topic-a"})
+
+	m, err := r.FetchMessage(tl)
+	if err != nil {
+		t.Fatalf("kafka-feed: read message error: %v", err)
+	}
+
+	tl.Infof("fetched: %v", m)
+	if string(m.Value) != "test 1" {
+		t.Error("incorrect first value")
+	}
+
+	m, err = r.FetchMessage(tl)
+	if err != nil {
+		t.Fatalf("kafka-feed: read message error: %v", err)
+	}
+
+	tl.Infof("fetched: %v", m)
+	if string(m.Value) != "test 2" {
+		t.Error("incorrect second value")
+	}
+
+	testCloseKafkaReader(t, r)
+
+	r = testKafkaConnect(t, 21001, []string{"topic-a"})
+
+	m, err = r.FetchMessage(tl)
+	if err != nil {
+		t.Fatalf("kafka-feed: read message error: %v", err)
+	}
+
+	tl.Infof("fetched: %v", m)
+	tl.Infof("fetched: %v", m)
+	if string(m.Value) != "test 1" {
+		t.Error("incorrect first value #2")
+	}
+
+	m, err = r.FetchMessage(tl)
+	if err != nil {
+		t.Fatalf("kafka-feed: read message error: %v", err)
+	}
+
+	tl.Infof("fetched: %v", m)
+	if string(m.Value) != "test 2" {
+		t.Error("incorrect second value #2")
+	}
+
+	testCloseKafkaReader(t, r)
+}
+
+func TestKafkaReadTwoRepeatOne(t *testing.T) {
+	tl, mock := testCreateKafkaMockServer(t, 21001)
+	defer testStopMockServer(t, mock)
+
+	mock.SimplePost("topic-a", 2, nil, []byte("test 1"))
+	mock.SimplePost("topic-a", 2, nil, []byte("test 2"))
+
+	r := testKafkaConnect(t, 21001, []string{"topic-a"})
+
+	m, err := r.FetchMessage(tl)
+	if err != nil {
+		t.Fatalf("kafka-feed: read message error: %v", err)
+	}
+
+	tl.Infof("fetched: %v", m)
+	if string(m.Value) != "test 1" {
+		t.Error("incorrect first value")
+	}
+
+	r.CommitMessages(tl, m)
+
+	m, err = r.FetchMessage(tl)
+	if err != nil {
+		t.Fatalf("kafka-feed: read message error: %v", err)
+	}
+
+	tl.Infof("fetched: %v", m)
+	if string(m.Value) != "test 2" {
+		t.Error("incorrect second value")
+	}
+
+	testCloseKafkaReader(t, r)
+
+	r = testKafkaConnect(t, 21001, []string{"topic-a"})
+
+	m, err = r.FetchMessage(tl)
+	if err != nil {
+		t.Fatalf("kafka-feed: read message error: %v", err)
+	}
+
+	tl.Infof("fetched: %v", m)
+	tl.Infof("fetched: %v", m)
+	if string(m.Value) != "test 2" {
+		t.Error("incorrect first value #2")
+	}
+
+	testCloseKafkaReader(t, r)
+}
+
+func TestKafkaCommitThousands(t *testing.T) {
+	tl, mock := testCreateKafkaMockServer(t, 21001)
+	defer testStopMockServer(t, mock)
+
+	for n := 0; n < 10000; n++ {
+		mock.SimplePost("topic-a", 2, []byte(fmt.Sprintf("%d", n)), []byte(fmt.Sprintf("testing: test %d", n)))
+	}
+
+	r := testKafkaConnect(t, 21001, []string{"topic-a"})
+	defer testCloseKafkaReader(t, r)
+
+	for n := 0; n < 10000; n++ {
+		m, err := r.FetchMessage(tl)
+		if err != nil {
+			t.Fatalf("kafka-feed: read message error: %v", err)
+		}
+
+		r.CommitMessages(tl, m)
+	}
+
+	tl.Infof("committed 10000 messages")
+}
+
+func TestKafkaCommitHundredThousand(t *testing.T) {
+	tl, mock := testCreateKafkaMockServer(t, 21001)
+	defer testStopMockServer(t, mock)
+
+	for n := 0; n < 100000; n++ {
+		mock.SimplePost("topic-a", 2, []byte(fmt.Sprintf("%d", n)), []byte(fmt.Sprintf("testing: test %d", n)))
+	}
+
+	r := testKafkaConnect(t, 21001, []string{"topic-a"})
+	defer testCloseKafkaReader(t, r)
+
+	for n := 0; n < 100000; n++ {
+		m, err := r.FetchMessage(tl)
+		if err != nil {
+			t.Fatalf("kafka-feed: read message error: %v", err)
+		}
+
+		r.CommitMessages(tl, m)
+	}
+
+	tl.Infof("committed 10000 messages")
 }

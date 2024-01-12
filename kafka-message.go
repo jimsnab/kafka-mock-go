@@ -8,16 +8,16 @@ import (
 
 type (
 	kafkaMessage struct {
-		l lane.Lane
-		conn net.Conn
+		l             lane.Lane
+		conn          net.Conn
 		correlationId int
 	}
 )
 
 func newKafkaMessage(l lane.Lane, conn net.Conn, correlationId int) *kafkaMessage {
 	return &kafkaMessage{
-		l: l,
-		conn: conn,
+		l:             l,
+		conn:          conn,
 		correlationId: correlationId,
 	}
 }
@@ -43,6 +43,6 @@ func (km *kafkaMessage) send(payload []byte) (err error) {
 		return
 	}
 
-	km.l.Tracef("sent kafka response %d: %d bytes", km.correlationId, payloadSize + 8)
+	km.l.Tracef("sent kafka response %d: %d bytes", km.correlationId, payloadSize+8)
 	return
 }
