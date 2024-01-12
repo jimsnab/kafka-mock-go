@@ -1,4 +1,4 @@
-module kafka-mock-go
+module github.com/jimsnab/kafka-mock-go
 
 go 1.21
 
