@@ -1,4 +1,4 @@
-module kafka-mock
+module kafka-mock-go
 
 go 1.21
 
