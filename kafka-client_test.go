@@ -164,7 +164,6 @@ func TestKafkaReadTwoTwice(t *testing.T) {
 	}
 
 	tl.Infof("fetched: %v", m)
-	tl.Infof("fetched: %v", m)
 	if string(m.Value) != "test 1" {
 		t.Error("incorrect first value #2")
 	}
@@ -222,7 +221,6 @@ func TestKafkaReadTwoRepeatOne(t *testing.T) {
 		t.Fatalf("kafka-feed: read message error: %v", err)
 	}
 
-	tl.Infof("fetched: %v", m)
 	tl.Infof("fetched: %v", m)
 	if string(m.Value) != "test 2" {
 		t.Error("incorrect first value #2")
