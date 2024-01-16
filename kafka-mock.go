@@ -15,6 +15,7 @@ type (
 	KafkaMock struct {
 		mu       sync.Mutex
 		l        lane.Lane
+		starting sync.WaitGroup
 		wg       sync.WaitGroup
 		cancelFn context.CancelFunc
 		stopped  atomic.Bool
@@ -47,6 +48,7 @@ func (km *KafkaMock) Start() {
 	l2, cancelFn := km.l.DeriveWithCancel()
 	km.cancelFn = cancelFn
 	km.wg.Add(1)
+	km.starting.Add(1)
 	go km.run(l2)
 }
 
@@ -55,6 +57,9 @@ func (km *KafkaMock) RequestStop() {
 	if !alreadyStopped {
 		km.mu.Lock()
 		defer km.mu.Unlock()
+
+		// wait for startup to complete
+		km.starting.Wait()
 
 		if km.cancelFn != nil {
 			km.cancelFn()
@@ -104,6 +109,7 @@ func (km *KafkaMock) run(l lane.Lane) {
 	cxnNumber := 0
 
 	l.Tracef("kafka mock server is listening on %s", iface)
+	km.starting.Done()
 
 	for {
 		connection, err := listener.Accept()
