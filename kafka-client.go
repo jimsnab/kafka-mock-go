@@ -3,21 +3,35 @@ package kafkamock
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
+	"os"
 	"reflect"
+	"sync"
+	"sync/atomic"
+	"syscall"
+	"time"
 
 	"github.com/jimsnab/go-lane"
 )
 
 type (
 	kafkaClient struct {
-		l       lane.Lane
-		conn    net.Conn
-		port    int
-		oc      onClose
-		inbound []byte
-		ds      *kafkaDataStore
+		l          lane.Lane
+		conn       net.Conn
+		connMu     sync.Mutex
+		serverPort uint
+		clientPort uint
+		oc         onClose
+		inbound    []byte
+		latency    time.Duration
+		connected  sync.WaitGroup
+		ds         *kafkaDataStore
+		requests   []*kafkaRequest
+		wg         sync.WaitGroup // overall running state
+		requestWg  sync.WaitGroup // active api request
+		stopping   atomic.Bool
 	}
 
 	onClose func()
@@ -31,64 +45,108 @@ type (
 	dispatchHandler func(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map[int]any) (response any, rtags map[int]any, err error)
 
 	kafkaApiKey int
+
+	kafkaRequest struct {
+	}
 )
 
-func newKafkaClient(l lane.Lane, ds *kafkaDataStore, conn net.Conn, port int, oc onClose) *kafkaClient {
+func newKafkaClient(l lane.Lane, ds *kafkaDataStore, conn net.Conn, serverPort uint, latency time.Duration, oc onClose) *kafkaClient {
 	kc := &kafkaClient{
-		l:       l,
-		conn:    conn,
-		port:    port,
-		oc:      oc,
-		inbound: []byte{},
-		ds:      ds,
+		l:          l,
+		conn:       conn,
+		clientPort: netRemotePort(conn),
+		serverPort: serverPort,
+		oc:         oc,
+		inbound:    []byte{},
+		ds:         ds,
+		latency:    latency,
+		requests:   []*kafkaRequest{},
 	}
 
+	kc.wg.Add(1)
 	go kc.handle()
 	return kc
 }
 
 func (kc *kafkaClient) handle() {
-	defer kc.oc()
+	defer func() {
+		kc.wg.Done()
+		kc.oc()
+		kc.l.Tracef("client %d task done", kc.clientPort)
+	}()
+
+	kc.connected.Add(1)
+	defer kc.connected.Done()
 
 	for {
-		buffer := make([]byte, 8192)
-		n, err := kc.conn.Read(buffer)
-		if err != nil {
-			if !wasSocketClosed(err) {
-				panic(fmt.Sprintf("read error: %v", err))
-			}
-			return
-		}
-
-		kc.inbound = append(kc.inbound, buffer[0:n]...)
-
-		if len(kc.inbound) < 4 {
-			continue
+		if kc.latency != 0 {
+			time.Sleep(kc.latency) // test hook
 		}
 
 		msg := getMessage(kc.inbound)
 		if msg == nil {
+			// no message ready - read more data from the client
+			buffer := make([]byte, 8192)
+			kc.conn.SetReadDeadline(time.Now().Add(time.Second))
+			n, err := kc.conn.Read(buffer)
+			if err != nil {
+				if errors.Is(err, os.ErrDeadlineExceeded) {
+					continue
+				}
+				if !wasSocketClosed(err) {
+					panic(fmt.Sprintf("read error: %v", err))
+				}
+				return
+			}
+
+			if kc.stopping.Load() {
+				// ignore the continued requests
+				kc.l.Tracef("closing in progress - ignoring %d request bytes", n)
+				continue
+			}
+
+			kc.inbound = append(kc.inbound, buffer[:n]...)
 			continue
 		}
 
 		kc.inbound = kc.inbound[4+msg.Len():]
-		reader := bufio.NewReader(msg)
 
-		if err = kc.dispatcher(reader); err != nil {
-			panic(err)
-		}
+		kc.requestWg.Add(1)
+		reader := bufio.NewReader(msg)
+		func() {
+			defer kc.requestWg.Done()
+			if err := kc.dispatcher(reader, msg.Len()); err != nil {
+				panic(err)
+			}
+		}()
 	}
 }
 
 func (kc *kafkaClient) Close() {
+	// prevent starting work on more requests
+	kc.stopping.Store(true)
+
+	// wait for the in flight requests to complete
+	kc.l.Tracef("waiting for client %d in-flight requests to complete", kc.clientPort)
+	kc.requestWg.Wait()
+
+	// close communication with the client
 	kc.conn.Close()
+
+	// wait for the handler task to finish
+	kc.l.Tracef("waiting for client %d handler task", kc.clientPort)
+	kc.wg.Wait()
+
+	kc.l.Tracef("client %d closed", kc.clientPort)
 }
 
 func (kc *kafkaClient) String() string {
 	return kc.conn.RemoteAddr().String()
 }
 
-func (kc *kafkaClient) dispatcher(reader *bufio.Reader) (err error) {
+func (kc *kafkaClient) dispatcher(reader *bufio.Reader, msgLength int) (err error) {
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
 
 	var hdr kafkaHeader0
 	next, obj := peekObject(reader, 0, reflect.TypeOf(hdr))
@@ -100,7 +158,7 @@ func (kc *kafkaClient) dispatcher(reader *bufio.Reader) (err error) {
 
 	apiName := apiNames[kafkaApiKey(hdr.RequestApiKey)]
 
-	kc.l.Tracef("kafka request %d: %s v%d", hdr.CorrelationId, apiName, hdr.RequestApiVersion)
+	kc.l.Tracef("kafka %d request %d: %s v%d", kc.clientPort, hdr.CorrelationId, apiName, hdr.RequestApiVersion)
 
 	next, clientId := peekString(reader, next)
 	if next < 0 {
@@ -118,37 +176,77 @@ func (kc *kafkaClient) dispatcher(reader *bufio.Reader) (err error) {
 			err = fmt.Errorf("header invalid tags")
 			return
 		}
-		kc.l.Tracef("kafka request tags: %v", tags)
+		kc.l.Tracef("kafka %d request tags: %v", kc.clientPort, tags)
 	}
 
 	handler, defined := apiTable[k]
 	if !defined {
 		err = fmt.Errorf("api undefined")
-		kc.l.Warnf("kafka request for unsupported API %d %s v%d", hdr.RequestApiKey, apiName, hdr.RequestApiVersion)
+		kc.l.Warnf("kafka request %d for unsupported API %d %s v%d", kc.clientPort, hdr.RequestApiKey, apiName, hdr.RequestApiVersion)
 		return
 	}
 
 	reader.Discard(next)
 
-	response, rtags, err := handler(reader, kc, clientId, tags)
+	var response any
+	var rtags map[int]any
+	response, rtags, err = handler(reader, kc, clientId, tags)
 	if err != nil {
 		return
 	}
 
-	var buf bytes.Buffer
-	w := bufio.NewWriter(&buf)
-	encodeObject(w, response)
+	remaining, _ := reader.Peek(msgLength)
+	if len(remaining) != 0 {
+		err = fmt.Errorf("unexpected %d bytes after %T request", len(remaining), response)
+		return
+	}
 
+	encodeObject(w, response)
 	if rtags != nil {
 		encodeTags(w, rtags)
 	}
 
+	// message fully processed
 	w.Flush()
 
-	km := newKafkaMessage(kc.l, kc.conn, int(hdr.CorrelationId))
+	km := newKafkaMessage(kc.l, kc.conn, int(hdr.CorrelationId), &kc.connMu)
 	if err = km.send(buf.Bytes()); err != nil {
+		if !kc.isConnected() {
+			// the client dropped - ignore the error
+			err = nil
+		}
 		return
 	}
 
 	return
+}
+
+func (kc *kafkaClient) isConnected() bool {
+	rc, err := kc.conn.(syscall.Conn).SyscallConn()
+	if err != nil {
+		kc.l.Error(err)
+		return false
+	}
+
+	var sysErr error
+	err = rc.Read(func(fd uintptr) bool {
+		_, sysErr = syscall.Getpeername(int(fd))
+		return true
+	})
+	if err != nil {
+		kc.l.Error(err)
+		return false
+	}
+
+	return sysErr == nil
+}
+
+func netRemotePort(conn net.Conn) uint {
+	addr := conn.RemoteAddr()
+	tcpAddr, is := addr.(*net.TCPAddr)
+	if !is {
+		panic("unsupported net connection type")
+	}
+
+	return uint(tcpAddr.Port)
 }

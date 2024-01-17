@@ -67,6 +67,7 @@ func offsetCommitV2(reader *bufio.Reader, kc *kafkaClient, clientId string, tags
 				offset := kp.GroupCommittedOffsets[request.GroupId]
 				if offset < par.CommittedOffset {
 					kp.GroupCommittedOffsets[request.GroupId] = par.CommittedOffset
+					kc.l.Tracef("kafka offset moved to %d", par.CommittedOffset)
 				}
 				kp.unlock()
 			} else {

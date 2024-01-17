@@ -13,26 +13,27 @@ import (
 
 type (
 	KafkaMock struct {
-		mu       sync.Mutex
-		l        lane.Lane
-		starting sync.WaitGroup
-		wg       sync.WaitGroup
-		cancelFn context.CancelFunc
-		stopped  atomic.Bool
-		port     int
-		listener net.Listener
-		clients  map[int]*kafkaClient
-		ds       *kafkaDataStore
+		mu         sync.Mutex
+		l          lane.Lane
+		starting   sync.WaitGroup
+		wg         sync.WaitGroup
+		cancelFn   context.CancelFunc
+		stopped    atomic.Bool
+		serverPort uint
+		listener   net.Listener
+		clients    map[int]*kafkaClient
+		ds         *kafkaDataStore
+		latency    time.Duration
 	}
 )
 
-func NewKafkaMock(l lane.Lane, port int) *KafkaMock {
+func NewKafkaMock(l lane.Lane, serverPort uint) *KafkaMock {
 	initializeApis()
 	return &KafkaMock{
-		l:       l,
-		port:    port,
-		clients: map[int]*kafkaClient{},
-		ds:      newKafkaDataStore(),
+		l:          l,
+		serverPort: serverPort,
+		clients:    map[int]*kafkaClient{},
+		ds:         newKafkaDataStore(),
 	}
 }
 
@@ -59,6 +60,7 @@ func (km *KafkaMock) RequestStop() {
 		defer km.mu.Unlock()
 
 		// wait for startup to complete
+		km.l.Trace("request stop is ensuring startup completed first")
 		km.starting.Wait()
 
 		if km.cancelFn != nil {
@@ -79,8 +81,10 @@ func (km *KafkaMock) RequestStop() {
 }
 
 func (km *KafkaMock) WaitForTermination() {
+	km.l.Trace("waiting for kafka mock to terminate")
 	km.wg.Wait()
 	km.RequestStop() // releases resources if not already released
+	km.l.Trace("kafka mock terminated")
 }
 
 func (km *KafkaMock) SimplePost(topic string, partition int, key, value []byte) {
@@ -99,7 +103,7 @@ func (km *KafkaMock) run(l lane.Lane) {
 	defer km.wg.Done()
 
 	// establish socket service
-	iface := fmt.Sprintf(":%d", km.port)
+	iface := fmt.Sprintf(":%d", km.serverPort)
 	listener, err := net.Listen("tcp", iface)
 	if err != nil {
 		panic(fmt.Sprintf("error opening kafka mock server socker: %v", err))
@@ -124,7 +128,7 @@ func (km *KafkaMock) run(l lane.Lane) {
 
 		km.mu.Lock()
 		cxnNumber++
-		kc := newKafkaClient(l, km.ds, connection, km.port, func() {
+		kc := newKafkaClient(l, km.ds, connection, km.serverPort, km.latency, func() {
 			l.Tracef("client disconnected: %s <-> %s", connection.LocalAddr().String(), connection.RemoteAddr().String())
 			km.mu.Lock()
 			delete(km.clients, cxnNumber)

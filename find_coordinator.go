@@ -26,7 +26,7 @@ func findCoordinatorV0(reader *bufio.Reader, kc *kafkaClient, clientId string, t
 	response = &findCoordinatorResponseV0{
 		NodeId: kLeaderNode,
 		Host:   "localhost",
-		Port:   int32(kc.port),
+		Port:   int32(kc.serverPort),
 	}
 	return
 }

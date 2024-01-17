@@ -53,7 +53,7 @@ func metadataV1(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map
 
 	response = &metadataResponseV1{
 		Brokers: []brokersV1{
-			{NodeId: kLeaderNode, Host: "localhost", Port: int32(kc.port)},
+			{NodeId: kLeaderNode, Host: "localhost", Port: int32(kc.serverPort)},
 		},
 		ControllerId: 500,
 		Topics:       topics,

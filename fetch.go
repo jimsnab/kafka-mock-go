@@ -2,6 +2,7 @@ package kafkamock
 
 import (
 	"bufio"
+	"time"
 )
 
 type (
@@ -71,6 +72,7 @@ func fetchV2(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map[in
 		}
 	}
 
+	expiration := time.Now().Add(time.Duration(request.MaxWaitMs) * time.Millisecond)
 	for {
 		more := false
 		for _, fd := range fds {
@@ -87,12 +89,37 @@ func fetchV2(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map[in
 				} else {
 					fd.offset++
 					more = true
+					expiration = time.Unix(0, 0)
 				}
 			}
 		}
 
 		if !more {
-			break
+			// is wait time expiring?
+			if time.Now().After(expiration) {
+				break
+			}
+
+			// is client getting closed?
+			isClosed := false
+			select {
+			case <-kc.l.Done():
+				isClosed = true
+				break
+			default:
+				break
+			}
+			if isClosed {
+				break
+			}
+
+			// did client disconnect?
+			if !kc.isConnected() {
+				break
+			}
+
+			// check for messages again in a moment
+			time.Sleep(time.Millisecond * 20)
 		}
 	}
 

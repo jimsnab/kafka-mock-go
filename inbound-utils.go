@@ -28,7 +28,7 @@ func getMessage(inbound []byte) (buf *bytes.Buffer) {
 		return
 	}
 
-	buf = bytes.NewBuffer(inbound[4:])
+	buf = bytes.NewBuffer(inbound[4 : 4+msgSize])
 	return
 }
 
@@ -44,11 +44,6 @@ func readRequest[T any](reader *bufio.Reader) (obj *T, err error) {
 		panic("unexpected request object type")
 	}
 	reader.Discard(next)
-	_, unfilled := reader.Peek(1)
-	if unfilled == nil {
-		err = fmt.Errorf("extra data %T", request)
-		return
-	}
 
 	obj = &request
 	return
