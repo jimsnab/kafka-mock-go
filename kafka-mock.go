@@ -35,7 +35,7 @@ func NewKafkaMock(l lane.Lane, serverPort uint) *KafkaMock {
 
 	return &KafkaMock{
 		parentLane: l,
-		l: l,
+		l:          l,
 		serverPort: serverPort,
 		ds:         newKafkaDataStore(),
 	}
