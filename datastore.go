@@ -32,10 +32,10 @@ type (
 		Timestamp  int64
 		Key        []byte
 		Value      []byte
-		Headers    []kafkaHeader
+		Headers    []kafkaRecordHeader
 	}
 
-	kafkaHeader struct {
+	kafkaRecordHeader struct {
 		HeaderKey   string
 		HeaderValue []byte
 	}
@@ -103,9 +103,9 @@ func (kp *kafkaPartition) postRecord(attribs int8, ts time.Time, key, value []by
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
 
-	flatHeaders := make([]kafkaHeader, 0, len(headers))
+	flatHeaders := make([]kafkaRecordHeader, 0, len(headers))
 	for k, v := range headers {
-		flatHeaders = append(flatHeaders, kafkaHeader{HeaderKey: k, HeaderValue: v})
+		flatHeaders = append(flatHeaders, kafkaRecordHeader{HeaderKey: k, HeaderValue: v})
 	}
 
 	record := &kafkaRecord{

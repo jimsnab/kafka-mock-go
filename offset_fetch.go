@@ -32,7 +32,7 @@ type (
 	}
 )
 
-func offsetFetchV1(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map[int]any) (response any, rtags map[int]any, err error) {
+func offsetFetchV1(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeader) (response any, rtags map[int]any, err error) {
 	request, err := readRequest[offsetFetchRequestV1](reader)
 	if err != nil {
 		return

@@ -13,26 +13,30 @@ import (
 
 type (
 	KafkaMock struct {
-		mu         sync.Mutex
-		l          lane.Lane
-		starting   sync.WaitGroup
-		wg         sync.WaitGroup
-		cancelFn   context.CancelFunc
-		stopped    atomic.Bool
-		serverPort uint
-		listener   net.Listener
-		clients    map[int]*kafkaClient
-		ds         *kafkaDataStore
-		latency    time.Duration
+		mu           sync.Mutex
+		parentLane   lane.Lane
+		l            lane.Lane
+		wg           sync.WaitGroup
+		cancelFn     context.CancelFunc
+		started      atomic.Bool
+		stopped      atomic.Bool
+		initializing sync.WaitGroup
+		serverPort   uint
+		listener     net.Listener
+		clients      map[int]*kafkaClient
+		active       sync.WaitGroup
+		ds           *kafkaDataStore
+		latency      time.Duration
 	}
 )
 
 func NewKafkaMock(l lane.Lane, serverPort uint) *KafkaMock {
 	initializeApis()
+
 	return &KafkaMock{
-		l:          l,
+		parentLane: l,
+		l: l,
 		serverPort: serverPort,
-		clients:    map[int]*kafkaClient{},
 		ds:         newKafkaDataStore(),
 	}
 }
@@ -42,40 +46,42 @@ func (km *KafkaMock) Start() {
 	km.mu.Lock()
 	defer km.mu.Unlock()
 
-	if km.cancelFn != nil {
+	if km.started.Swap(true) {
 		panic("can't start more than once")
 	}
 
-	l2, cancelFn := km.l.DeriveWithCancel()
+	km.listener = nil
+	km.clients = map[int]*kafkaClient{}
+	km.stopped.Store(false)
+
+	l, cancelFn := km.parentLane.DeriveWithCancel()
+	km.l = l
 	km.cancelFn = cancelFn
+
 	km.wg.Add(1)
-	km.starting.Add(1)
-	go km.run(l2)
+	km.initializing.Add(1)
+	go km.run()
 }
 
 func (km *KafkaMock) RequestStop() {
 	alreadyStopped := km.stopped.Swap(true)
 	if !alreadyStopped {
-		km.mu.Lock()
-		defer km.mu.Unlock()
+		if km.started.Load() {
+			// wait for startup to complete
+			km.l.Trace("request stop is ensuring startup completed first")
+			km.initializing.Wait()
 
-		// wait for startup to complete
-		km.l.Trace("request stop is ensuring startup completed first")
-		km.starting.Wait()
+			// force-close the socket listener
+			km.mu.Lock()
+			if km.listener != nil {
+				km.listener.Close()
+				km.l.Trace("kafka mock server listener terminated")
+				km.listener = nil
+			}
+			km.mu.Unlock()
 
-		if km.cancelFn != nil {
+			// cancel any i/o tasks
 			km.cancelFn()
-		}
-
-		if km.listener != nil {
-			km.listener.Close()
-			km.l.Trace("kafka mock server listener terminated")
-			km.listener = nil
-		}
-
-		for _, client := range km.clients {
-			km.l.Tracef("kafka mock server closing client %s", client.String())
-			client.Close()
 		}
 	}
 }
@@ -99,8 +105,12 @@ func (km *KafkaMock) ExtendedPost(topic string, partition int, key, value []byte
 	kp.postRecord(0, timestamp, key, value, headers)
 }
 
-func (km *KafkaMock) run(l lane.Lane) {
-	defer km.wg.Done()
+func (km *KafkaMock) run() {
+	defer func() {
+		km.active.Wait()
+		km.started.Store(false)
+		km.wg.Done()
+	}()
 
 	// establish socket service
 	iface := fmt.Sprintf(":%d", km.serverPort)
@@ -112,8 +122,8 @@ func (km *KafkaMock) run(l lane.Lane) {
 	km.listener = listener
 	cxnNumber := 0
 
-	l.Tracef("kafka mock server is listening on %s", iface)
-	km.starting.Done()
+	km.l.Tracef("kafka mock server is listening on %s", iface)
+	km.initializing.Done()
 
 	for {
 		connection, err := listener.Accept()
@@ -124,19 +134,45 @@ func (km *KafkaMock) run(l lane.Lane) {
 			break
 		}
 
-		l.Tracef("client connected: %s <-> %s", connection.LocalAddr().String(), connection.RemoteAddr().String())
+		select {
+		case <-km.l.Done():
+			// don't accept more connections
+			connection.Close()
+			continue
+		default:
+			// continue
+		}
+
+		km.l.Tracef("client connected: %s <-> %s", connection.LocalAddr().String(), connection.RemoteAddr().String())
 
 		km.mu.Lock()
 		cxnNumber++
-		kc := newKafkaClient(l, km.ds, connection, km.serverPort, km.latency, func() {
-			l.Tracef("client disconnected: %s <-> %s", connection.LocalAddr().String(), connection.RemoteAddr().String())
+		kc := newKafkaClient(km.l, km.ds, connection, km.serverPort, km.latency, func() {
+			km.l.Tracef("client disconnected: %s <-> %s", connection.LocalAddr().String(), connection.RemoteAddr().String())
 			km.mu.Lock()
 			delete(km.clients, cxnNumber)
+			km.active.Done()
 			km.wg.Done()
 			km.mu.Unlock()
 		})
 		km.clients[cxnNumber] = kc
+		km.active.Add(1)
 		km.wg.Add(1)
 		km.mu.Unlock()
 	}
+}
+
+// Tells the mock to stop accepting new requests and
+// to complete any blocked requests.
+func (km *KafkaMock) FinishRequests() {
+	km.cancelFn()
+}
+
+// Stops the server and gracefully closes clients, then starts
+// a new server with the same data store.
+func (km *KafkaMock) Restart() {
+	km.RequestStop()
+	km.WaitForTermination()
+	km.Start()
+	km.initializing.Wait()
 }

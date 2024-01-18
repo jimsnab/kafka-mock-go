@@ -37,7 +37,7 @@ type (
 	}
 )
 
-func offsetCommitV2(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map[int]any) (response any, rtags map[int]any, err error) {
+func offsetCommitV2(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeader) (response any, rtags map[int]any, err error) {
 	request, err := readRequest[offsetCommitRequestV2](reader)
 	if err != nil {
 		return

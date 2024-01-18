@@ -1,36 +1,31 @@
 package kafkamock
 
 import (
+	"fmt"
 	"net"
-	"sync"
 
 	"github.com/jimsnab/go-lane"
 )
 
 type (
 	kafkaMessage struct {
-		l             lane.Lane
-		conn          net.Conn
-		port          uint
-		correlationId int
-		pmu           *sync.Mutex
+		l    lane.Lane
+		conn net.Conn
+		port uint
+		hdr  *kafkaMessageHeader
 	}
 )
 
-func newKafkaMessage(l lane.Lane, conn net.Conn, correlationId int, pmu *sync.Mutex) *kafkaMessage {
+func newKafkaMessage(l lane.Lane, conn net.Conn, hdr *kafkaMessageHeader) *kafkaMessage {
 	return &kafkaMessage{
-		l:             l,
-		conn:          conn,
-		port:          netRemotePort(conn),
-		correlationId: correlationId,
-		pmu:           pmu,
+		l:    l,
+		conn: conn,
+		port: netRemotePort(conn),
+		hdr:  hdr,
 	}
 }
 
 func (km *kafkaMessage) send(payload []byte) (err error) {
-	km.pmu.Lock()
-	defer km.pmu.Unlock()
-
 	payloadSize := 4 + len(payload)
 
 	number := []byte{0, 0, 0, 0}
@@ -40,7 +35,7 @@ func (km *kafkaMessage) send(payload []byte) (err error) {
 		return
 	}
 
-	convertInt32(number, int32(km.correlationId))
+	convertInt32(number, int32(km.hdr.CorrelationId))
 	if _, err = km.conn.Write(number); err != nil {
 		km.l.Errorf("error sending kafka %d correlation id: %v", km.port, err)
 		return
@@ -51,6 +46,10 @@ func (km *kafkaMessage) send(payload []byte) (err error) {
 		return
 	}
 
-	km.l.Tracef("sent kafka %d response %d: %d bytes", km.port, km.correlationId, payloadSize+8)
+	cmd, _ := apiNames[km.hdr.RequestApiKey]
+	if cmd == "" {
+		cmd = fmt.Sprintf("%d", km.hdr.RequestApiKey)
+	}
+	km.l.Tracef("sent kafka %d response %d: cmd %s v%d: %d bytes", km.port, km.hdr.CorrelationId, cmd, km.hdr.RequestApiVersion, payloadSize+8)
 	return
 }

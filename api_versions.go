@@ -18,7 +18,7 @@ type (
 	}
 )
 
-func apiVersionsV0(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map[int]any) (response any, rtags map[int]any, err error) {
+func apiVersionsV0(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeader) (response any, rtags map[int]any, err error) {
 	keys := make([]int, 0, len(apiVersions))
 	for key, vr := range apiVersions {
 		if vr.min > -2 {

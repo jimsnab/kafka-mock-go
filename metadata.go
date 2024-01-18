@@ -40,7 +40,7 @@ type (
 
 const kLeaderNode = 100
 
-func metadataV1(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map[int]any) (response any, rtags map[int]any, err error) {
+func metadataV1(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeader) (response any, rtags map[int]any, err error) {
 	request, err := readRequest[metadataRequestV1](reader)
 	if err != nil {
 		return

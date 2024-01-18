@@ -20,7 +20,6 @@ type (
 	kafkaClient struct {
 		l          lane.Lane
 		conn       net.Conn
-		connMu     sync.Mutex
 		serverPort uint
 		clientPort uint
 		oc         onClose
@@ -36,13 +35,21 @@ type (
 
 	onClose func()
 
+	kafkaMessageHeader struct {
+		RequestApiKey     kafkaApiKey
+		RequestApiVersion int
+		CorrelationId     int
+		Client            string
+		Tags              map[int]any
+	}
+
 	kafkaHeader0 struct {
 		RequestApiKey     int16
 		RequestApiVersion int16
 		CorrelationId     int32
 	}
 
-	dispatchHandler func(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map[int]any) (response any, rtags map[int]any, err error)
+	dispatchHandler func(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeader) (response any, rtags map[int]any, err error)
 
 	kafkaApiKey int
 
@@ -85,10 +92,20 @@ func (kc *kafkaClient) handle() {
 
 		msg := getMessage(kc.inbound)
 		if msg == nil {
+			select {
+			case <-kc.l.Done():
+				// don't accept more requests
+				kc.conn.Close()
+				return
+			default:
+				// keep going
+			}
+
 			// no message ready - read more data from the client
 			buffer := make([]byte, 8192)
 			kc.conn.SetReadDeadline(time.Now().Add(time.Second))
 			n, err := kc.conn.Read(buffer)
+
 			if err != nil {
 				if errors.Is(err, os.ErrDeadlineExceeded) {
 					continue
@@ -179,6 +196,14 @@ func (kc *kafkaClient) dispatcher(reader *bufio.Reader, msgLength int) (err erro
 		kc.l.Tracef("kafka %d request tags: %v", kc.clientPort, tags)
 	}
 
+	kmh := kafkaMessageHeader{
+		RequestApiKey:     kafkaApiKey(hdr.RequestApiKey),
+		RequestApiVersion: int(hdr.RequestApiVersion),
+		CorrelationId:     int(hdr.CorrelationId),
+		Client:            clientId,
+		Tags:              tags,
+	}
+
 	handler, defined := apiTable[k]
 	if !defined {
 		err = fmt.Errorf("api undefined")
@@ -190,7 +215,7 @@ func (kc *kafkaClient) dispatcher(reader *bufio.Reader, msgLength int) (err erro
 
 	var response any
 	var rtags map[int]any
-	response, rtags, err = handler(reader, kc, clientId, tags)
+	response, rtags, err = handler(reader, kc, &kmh)
 	if err != nil {
 		return
 	}
@@ -209,7 +234,7 @@ func (kc *kafkaClient) dispatcher(reader *bufio.Reader, msgLength int) (err erro
 	// message fully processed
 	w.Flush()
 
-	km := newKafkaMessage(kc.l, kc.conn, int(hdr.CorrelationId), &kc.connMu)
+	km := newKafkaMessage(kc.l, kc.conn, &kmh)
 	if err = km.send(buf.Bytes()); err != nil {
 		if !kc.isConnected() {
 			// the client dropped - ignore the error
@@ -222,23 +247,14 @@ func (kc *kafkaClient) dispatcher(reader *bufio.Reader, msgLength int) (err erro
 }
 
 func (kc *kafkaClient) isConnected() bool {
-	rc, err := kc.conn.(syscall.Conn).SyscallConn()
+	f, err := kc.conn.(*net.TCPConn).File()
 	if err != nil {
-		kc.l.Error(err)
 		return false
 	}
 
-	var sysErr error
-	err = rc.Read(func(fd uintptr) bool {
-		_, sysErr = syscall.Getpeername(int(fd))
-		return true
-	})
-	if err != nil {
-		kc.l.Error(err)
-		return false
-	}
-
-	return sysErr == nil
+	b := []byte{0}
+	_, _, err = syscall.Recvfrom(int(f.Fd()), b, syscall.MSG_PEEK|syscall.MSG_DONTWAIT)
+	return err != nil
 }
 
 func netRemotePort(conn net.Conn) uint {

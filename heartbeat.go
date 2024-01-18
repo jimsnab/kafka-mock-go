@@ -16,7 +16,7 @@ type (
 	}
 )
 
-func heartbeatV0(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map[int]any) (response any, rtags map[int]any, err error) {
+func heartbeatV0(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeader) (response any, rtags map[int]any, err error) {
 	_, err = readRequest[heartbeatRequestV0](reader)
 	if err != nil {
 		return

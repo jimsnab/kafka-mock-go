@@ -38,7 +38,7 @@ type (
 	}
 )
 
-func listOffsetsV1(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map[int]any) (response any, rtags map[int]any, err error) {
+func listOffsetsV1(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeader) (response any, rtags map[int]any, err error) {
 	request, err := readRequest[listOffsetsRequestV1](reader)
 	if err != nil {
 		return

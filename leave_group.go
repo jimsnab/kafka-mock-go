@@ -15,7 +15,7 @@ type (
 	}
 )
 
-func leaveGroupV0(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map[int]any) (response any, rtags map[int]any, err error) {
+func leaveGroupV0(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeader) (response any, rtags map[int]any, err error) {
 	if _, err = readRequest[leaveGroupRequestV0](reader); err != nil {
 		return
 	}

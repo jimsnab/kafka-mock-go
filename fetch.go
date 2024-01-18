@@ -49,7 +49,7 @@ type (
 	}
 )
 
-func fetchV2(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map[int]any) (response any, rtags map[int]any, err error) {
+func fetchV2(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeader) (response any, rtags map[int]any, err error) {
 	request, err := readRequest[fetchRequestV2](reader)
 	if err != nil {
 		return
@@ -110,11 +110,6 @@ func fetchV2(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map[in
 				break
 			}
 			if isClosed {
-				break
-			}
-
-			// did client disconnect?
-			if !kc.isConnected() {
 				break
 			}
 

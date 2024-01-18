@@ -36,7 +36,7 @@ type (
 	}
 )
 
-func syncGroupV0(reader *bufio.Reader, kc *kafkaClient, clientId string, tags map[int]any) (response any, rtags map[int]any, err error) {
+func syncGroupV0(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeader) (response any, rtags map[int]any, err error) {
 	request, err := readRequest[syncGroupRequestV0](reader)
 	if err != nil {
 		return
