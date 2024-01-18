@@ -176,3 +176,11 @@ func (km *KafkaMock) Restart() {
 	km.Start()
 	km.initializing.Wait()
 }
+
+// Clients will usually expect partitions to pre-exist before they connect.
+func (km *KafkaMock) CreatePartitionTopics(topics []string, partition int) {
+	for _, topic := range topics {
+		kt := km.ds.createTopic(topic)
+		kt.createPartition(int32(partition))
+	}
+}

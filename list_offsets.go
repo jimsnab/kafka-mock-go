@@ -48,13 +48,14 @@ func listOffsetsV1(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeade
 
 	for _, t := range request.Topics {
 		kt := kc.ds.getTopic(t.Name)
-		if kt == nil {
-			continue
-		}
 
 		rpars := make([]listOffsetResponsePartition, 0, len(t.Parititions))
 		for _, p := range t.Parititions {
-			kp := kt.getPartition(p.PartitionIndex)
+			var kp *kafkaPartition
+			if kt != nil {
+				kp = kt.getPartition(p.PartitionIndex)
+			}
+
 			if kp == nil {
 				rpars = append(rpars, listOffsetResponsePartition{PartitionIndex: p.PartitionIndex, ErrorCode: int16(UnknownTopicOrPartition)})
 			} else {
@@ -90,6 +91,6 @@ func listOffsetsV1(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeade
 		})
 	}
 
-	response = lo
+	response = &listOffsetsResponseV1{Topics: lo}
 	return
 }

@@ -72,6 +72,6 @@ func offsetFetchV1(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeade
 		rtopics = append(rtopics, offsetFetchTopicV1{Name: name, Partitions: rpars})
 	}
 
-	response = rtopics
+	response = &offsetFetchResponseV1{Topics: rtopics}
 	return
 }

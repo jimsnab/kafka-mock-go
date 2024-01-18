@@ -56,8 +56,8 @@ func fetchV2(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeader) (re
 	}
 
 	// establish which topics/partitions to fetch
+	// the client assumes they pre-exist
 	fds := []*fetchData{}
-
 	for _, topic := range request.Topics {
 		kt := kc.ds.getTopic((topic.Topic))
 
@@ -73,6 +73,7 @@ func fetchV2(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeader) (re
 	}
 
 	expiration := time.Now().Add(time.Duration(request.MaxWaitMs) * time.Millisecond)
+	hasOne := false
 	for {
 		more := false
 		for _, fd := range fds {
@@ -84,19 +85,19 @@ func fetchV2(reader *bufio.Reader, kc *kafkaClient, kmh *kafkaMessageHeader) (re
 				}
 				fd.kp.unlock()
 
-				if rec == nil || !fd.ms.appendMessage(rec, fd.maxSize) {
-					fd.kp = nil
-				} else {
-					fd.offset++
+				if rec != nil {
 					more = true
-					expiration = time.Unix(0, 0)
+					hasOne = true
+					if fd.ms.appendMessage(rec, fd.maxSize) {
+						fd.offset++
+					}
 				}
 			}
 		}
 
 		if !more {
 			// is wait time expiring?
-			if time.Now().After(expiration) {
+			if hasOne || time.Now().After(expiration) {
 				break
 			}
 

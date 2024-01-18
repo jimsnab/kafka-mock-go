@@ -14,7 +14,7 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-func testCreateKafkaMockServer(t *testing.T, serverPort uint) (tl lane.TestingLane, mock *KafkaMock) {
+func testCreateKafkaMockServer(t *testing.T, serverPort uint, topics []string) (tl lane.TestingLane, mock *KafkaMock) {
 	// tl is used by the tests to check for specific log messages to confirm points of execution
 	tl = lane.NewTestingLane(context.Background())
 	tl.WantDescendantEvents(true)
@@ -25,6 +25,7 @@ func testCreateKafkaMockServer(t *testing.T, serverPort uint) (tl lane.TestingLa
 	tl.AddTee(ll)
 
 	mock = NewKafkaMock(tl, serverPort)
+	mock.CreatePartitionTopics(topics, 2)
 
 	mock.Start()
 	return
@@ -93,10 +94,11 @@ func testCloseKafkaReader(t *testing.T, tl lane.Lane, reader *kafka.Reader) {
 }
 
 func TestKafkaHeader(t *testing.T) {
-	tl, mock := testCreateKafkaMockServer(t, 21001)
+	topics := []string{"topic-a"}
+	tl, mock := testCreateKafkaMockServer(t, 21001, topics)
 	defer testStopMockServer(t, mock)
 
-	r := testKafkaConnect(t, 21001, []string{"topic-a"})
+	r := testKafkaConnect(t, 21001, topics)
 	defer testCloseKafkaReader(t, tl, r)
 
 	// spin until expected api is invoked - upon failure, the test times out
@@ -110,12 +112,13 @@ func TestKafkaHeader(t *testing.T) {
 }
 
 func TestKafkaReadOne(t *testing.T) {
-	tl, mock := testCreateKafkaMockServer(t, 21001)
+	topics := []string{"topic-a"}
+	tl, mock := testCreateKafkaMockServer(t, 21001, topics)
 	defer testStopMockServer(t, mock)
 
 	mock.SimplePost("topic-a", 2, nil, []byte("test"))
 
-	r := testKafkaConnect(t, 21001, []string{"topic-a"})
+	r := testKafkaConnect(t, 21001, topics)
 	defer testCloseKafkaReader(t, tl, r)
 	defer mock.FinishRequests()
 
@@ -128,12 +131,13 @@ func TestKafkaReadOne(t *testing.T) {
 }
 
 func TestKafkaCommitOne(t *testing.T) {
-	tl, mock := testCreateKafkaMockServer(t, 21001)
+	topics := []string{"topic-a"}
+	tl, mock := testCreateKafkaMockServer(t, 21001, topics)
 	defer testStopMockServer(t, mock)
 
 	mock.SimplePost("topic-a", 2, nil, []byte("test"))
 
-	r := testKafkaConnect(t, 21001, []string{"topic-a"})
+	r := testKafkaConnect(t, 21001, topics)
 	defer testCloseKafkaReader(t, tl, r)
 	defer mock.FinishRequests()
 
@@ -155,13 +159,14 @@ func TestKafkaCommitOne(t *testing.T) {
 }
 
 func TestKafkaReadTwo(t *testing.T) {
-	tl, mock := testCreateKafkaMockServer(t, 21001)
+	topics := []string{"topic-a"}
+	tl, mock := testCreateKafkaMockServer(t, 21001, topics)
 	defer testStopMockServer(t, mock)
 
 	mock.SimplePost("topic-a", 2, nil, []byte("test 1"))
 	mock.SimplePost("topic-a", 2, nil, []byte("test 2"))
 
-	r := testKafkaConnect(t, 21001, []string{"topic-a"})
+	r := testKafkaConnect(t, 21001, topics)
 	defer testCloseKafkaReader(t, tl, r)
 	defer mock.FinishRequests()
 
@@ -181,14 +186,15 @@ func TestKafkaReadTwo(t *testing.T) {
 }
 
 func TestKafkaReadTwoTwice(t *testing.T) {
-	tl, mock := testCreateKafkaMockServer(t, 21001)
+	topics := []string{"topic-a"}
+	tl, mock := testCreateKafkaMockServer(t, 21001, topics)
 	defer testStopMockServer(t, mock)
 
 	mock.SimplePost("topic-a", 2, nil, []byte("test 1"))
 	mock.SimplePost("topic-a", 2, nil, []byte("test 2"))
 
 	func() {
-		r := testKafkaConnect(t, 21001, []string{"topic-a"})
+		r := testKafkaConnect(t, 21001, topics)
 		defer testCloseKafkaReader(t, tl, r)
 
 		m, err := r.FetchMessage(tl)
@@ -218,7 +224,7 @@ func TestKafkaReadTwoTwice(t *testing.T) {
 	func() {
 		mock.Restart()
 
-		r := testKafkaConnect(t, 21001, []string{"topic-a"})
+		r := testKafkaConnect(t, 21001, topics)
 		defer testCloseKafkaReader(t, tl, r)
 		defer mock.FinishRequests()
 
@@ -245,14 +251,15 @@ func TestKafkaReadTwoTwice(t *testing.T) {
 }
 
 func TestKafkaReadTwoRepeatOne(t *testing.T) {
-	tl, mock := testCreateKafkaMockServer(t, 21001)
+	topics := []string{"topic-a"}
+	tl, mock := testCreateKafkaMockServer(t, 21001, topics)
 	defer testStopMockServer(t, mock)
 
 	mock.SimplePost("topic-a", 2, nil, []byte("test 1"))
 	mock.SimplePost("topic-a", 2, nil, []byte("test 2"))
 
 	func() {
-		r := testKafkaConnect(t, 21001, []string{"topic-a"})
+		r := testKafkaConnect(t, 21001, topics)
 		defer testCloseKafkaReader(t, tl, r)
 
 		m, err := r.FetchMessage(tl)
@@ -284,7 +291,7 @@ func TestKafkaReadTwoRepeatOne(t *testing.T) {
 	func() {
 		mock.Restart()
 
-		r := testKafkaConnect(t, 21001, []string{"topic-a"})
+		r := testKafkaConnect(t, 21001, topics)
 		defer testCloseKafkaReader(t, tl, r)
 		defer mock.FinishRequests()
 
@@ -301,14 +308,15 @@ func TestKafkaReadTwoRepeatOne(t *testing.T) {
 }
 
 func TestKafkaCommitThousands(t *testing.T) {
-	tl, mock := testCreateKafkaMockServer(t, 21001)
+	topics := []string{"topic-a"}
+	tl, mock := testCreateKafkaMockServer(t, 21001, topics)
 	defer testStopMockServer(t, mock)
 
 	for n := 0; n < 10000; n++ {
 		mock.SimplePost("topic-a", 2, []byte(fmt.Sprintf("%d", n)), []byte(fmt.Sprintf("testing: test %d", n)))
 	}
 
-	r := testKafkaConnect(t, 21001, []string{"topic-a"})
+	r := testKafkaConnect(t, 21001, topics)
 	defer testCloseKafkaReader(t, tl, r)
 	defer mock.FinishRequests()
 
@@ -325,14 +333,15 @@ func TestKafkaCommitThousands(t *testing.T) {
 }
 
 func TestKafkaCommitHundredThousand(t *testing.T) {
-	tl, mock := testCreateKafkaMockServer(t, 21001)
+	topics := []string{"topic-a"}
+	tl, mock := testCreateKafkaMockServer(t, 21001, topics)
 	defer testStopMockServer(t, mock)
 
 	for n := 0; n < 100000; n++ {
 		mock.SimplePost("topic-a", 2, []byte(fmt.Sprintf("%d", n)), []byte(fmt.Sprintf("testing: test %d", n)))
 	}
 
-	r := testKafkaConnect(t, 21001, []string{"topic-a"})
+	r := testKafkaConnect(t, 21001, topics)
 	defer testCloseKafkaReader(t, tl, r)
 	defer mock.FinishRequests()
 
@@ -349,14 +358,15 @@ func TestKafkaCommitHundredThousand(t *testing.T) {
 }
 
 func TestKafkaCommitHundredSyncCommits(t *testing.T) {
-	tl, mock := testCreateKafkaMockServer(t, 21001)
+	topics := []string{"topic-a"}
+	tl, mock := testCreateKafkaMockServer(t, 21001, topics)
 	defer testStopMockServer(t, mock)
 
 	for n := 0; n < 100; n++ {
 		mock.SimplePost("topic-a", 2, []byte(fmt.Sprintf("%d", n)), []byte(fmt.Sprintf("testing: test %d", n)))
 	}
 
-	r := testKafkaConnectEx(t, 21001, []string{"topic-a"}, 0, 0, 1024)
+	r := testKafkaConnectEx(t, 21001, topics, 0, 0, 1024)
 	defer testCloseKafkaReader(t, tl, r)
 	defer mock.FinishRequests()
 
@@ -376,7 +386,8 @@ func TestKafkaCommitHundredLatency(t *testing.T) {
 	// when latency is introduced, the client's requests can get combined
 	// latency of 30 ms is specifically chosen to collide with a client
 	// side heartbeat
-	tl, mock := testCreateKafkaMockServer(t, 21001)
+	topics := []string{"topic-a"}
+	tl, mock := testCreateKafkaMockServer(t, 21001, topics)
 	mock.latency = time.Millisecond * 30
 	defer testStopMockServer(t, mock)
 
@@ -384,7 +395,7 @@ func TestKafkaCommitHundredLatency(t *testing.T) {
 		mock.SimplePost("topic-a", 2, []byte(fmt.Sprintf("%d", n)), []byte(fmt.Sprintf("testing: test %d", n)))
 	}
 
-	r := testKafkaConnectEx(t, 21001, []string{"topic-a"}, 0, 0, 1024)
+	r := testKafkaConnectEx(t, 21001, topics, 0, 0, 1024)
 	defer testCloseKafkaReader(t, tl, r)
 	defer mock.FinishRequests()
 
@@ -405,7 +416,8 @@ func TestKafkaCommitHundredLatency(t *testing.T) {
 }
 
 func TestKafkaRapidTwoClients(t *testing.T) {
-	tl, mock := testCreateKafkaMockServer(t, 21001)
+	topics := []string{"simple-feed"}
+	tl, mock := testCreateKafkaMockServer(t, 21001, topics)
 	mock.latency = time.Millisecond * 5
 	defer testStopMockServer(t, mock)
 
@@ -417,7 +429,7 @@ func TestKafkaRapidTwoClients(t *testing.T) {
 	}
 
 	pullAndDrop := func() {
-		r := testKafkaConnectEx(t, 21001, []string{"simple-feed"}, 0, 0, 1024)
+		r := testKafkaConnectEx(t, 21001, topics, 0, 0, 1024)
 		defer testCloseKafkaReader(t, tl, r)
 
 		var wg sync.WaitGroup
@@ -449,11 +461,12 @@ func TestKafkaRapidTwoClients(t *testing.T) {
 }
 
 func TestKafkaRapidFetchAndHeartbeat(t *testing.T) {
-	tl, mock := testCreateKafkaMockServer(t, 21001)
+	topics := []string{"simple-feed"}
+	tl, mock := testCreateKafkaMockServer(t, 21001, topics)
 	mock.latency = time.Millisecond * 5
 	defer testStopMockServer(t, mock)
 
-	r := testKafkaConnectEx(t, 21001, []string{"simple-feed"}, 0, time.Millisecond*10, 1024)
+	r := testKafkaConnectEx(t, 21001, topics, 0, time.Millisecond*10, 1024)
 	defer testCloseKafkaReader(t, tl, r)
 
 	events := loadTestEvents(t, "test_assets/simple-feed.events", -1)
@@ -475,4 +488,36 @@ func TestKafkaRapidFetchAndHeartbeat(t *testing.T) {
 		mock.SimplePost("simple-feed", 2, []byte("unused-key"), events[0])
 	}
 
+}
+
+func TestKafkaMessagesAfterStart(t *testing.T) {
+	topics := []string{"simple-feed"}
+	tl, mock := testCreateKafkaMockServer(t, 21001, topics)
+	mock.latency = time.Millisecond * 5
+	defer testStopMockServer(t, mock)
+
+	r := testKafkaConnectEx(t, 21001, topics, 0, 0, 1024)
+	defer testCloseKafkaReader(t, tl, r)
+
+	time.Sleep(time.Millisecond * 250)
+	tl.Info("filling with some events")
+
+	events := loadTestEvents(t, "test_assets/simple-feed.events", -1)
+	for _, event := range events {
+		mock.SimplePost("simple-feed", 2, []byte("unused-key"), event)
+	}
+
+	for _, event := range events {
+		m, err := r.FetchMessage(tl)
+		if err != nil {
+			t.Fatalf("fetch error: %v", err)
+		}
+
+		if string(m.Value) != string(event) {
+			t.Errorf("payload mismatch\n\nreceived: %s\n\nexpected: %s", string(m.Value), string(event))
+		}
+	}
+
+	tl.Info("pulled all the events")
+	mock.FinishRequests()
 }
