@@ -64,10 +64,10 @@ func testStopMockServer(t *testing.T, mock *KafkaMock) {
 }
 
 func testKafkaConnect(t *testing.T, serverPort uint, topics []string) (reader *kafka.Reader) {
-	return testKafkaConnectEx(t, serverPort, topics, time.Millisecond*10, 0, 10e6)
+	return testKafkaConnectEx(t, serverPort, topics, time.Millisecond*10, 0, 10e6, 0)
 }
 
-func testKafkaConnectEx(t *testing.T, serverPort uint, topics []string, commitInterval, heartbeatInterval time.Duration, maxBytes int) (reader *kafka.Reader) {
+func testKafkaConnectEx(t *testing.T, serverPort uint, topics []string, commitInterval, heartbeatInterval time.Duration, maxBytes int, brt time.Duration) (reader *kafka.Reader) {
 	r := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:           []string{fmt.Sprintf("localhost:%d", serverPort)},
 		GroupID:           "kafka-mock",
@@ -76,6 +76,8 @@ func testKafkaConnectEx(t *testing.T, serverPort uint, topics []string, commitIn
 		MaxBytes:          maxBytes,
 		CommitInterval:    commitInterval,
 		HeartbeatInterval: heartbeatInterval,
+		ReadBatchTimeout:  brt,
+		MaxWait:           brt,
 	})
 
 	reader = r
@@ -366,7 +368,7 @@ func TestKafkaCommitHundredSyncCommits(t *testing.T) {
 		mock.SimplePost("topic-a", 2, []byte(fmt.Sprintf("%d", n)), []byte(fmt.Sprintf("testing: test %d", n)))
 	}
 
-	r := testKafkaConnectEx(t, 21001, topics, 0, 0, 1024)
+	r := testKafkaConnectEx(t, 21001, topics, 0, 0, 1024, 0)
 	defer testCloseKafkaReader(t, tl, r)
 	defer mock.FinishRequests()
 
@@ -395,7 +397,7 @@ func TestKafkaCommitHundredLatency(t *testing.T) {
 		mock.SimplePost("topic-a", 2, []byte(fmt.Sprintf("%d", n)), []byte(fmt.Sprintf("testing: test %d", n)))
 	}
 
-	r := testKafkaConnectEx(t, 21001, topics, 0, 0, 1024)
+	r := testKafkaConnectEx(t, 21001, topics, 0, 0, 1024, 0)
 	defer testCloseKafkaReader(t, tl, r)
 	defer mock.FinishRequests()
 
@@ -429,7 +431,7 @@ func TestKafkaRapidTwoClients(t *testing.T) {
 	}
 
 	pullAndDrop := func() {
-		r := testKafkaConnectEx(t, 21001, topics, 0, 0, 1024)
+		r := testKafkaConnectEx(t, 21001, topics, 0, 0, 1024, 0)
 		defer testCloseKafkaReader(t, tl, r)
 
 		var wg sync.WaitGroup
@@ -466,7 +468,7 @@ func TestKafkaRapidFetchAndHeartbeat(t *testing.T) {
 	mock.latency = time.Millisecond * 5
 	defer testStopMockServer(t, mock)
 
-	r := testKafkaConnectEx(t, 21001, topics, 0, time.Millisecond*10, 1024)
+	r := testKafkaConnectEx(t, 21001, topics, 0, time.Millisecond*10, 1024, 0)
 	defer testCloseKafkaReader(t, tl, r)
 
 	events := loadTestEvents(t, "test_assets/simple-feed.events", -1)
@@ -496,7 +498,7 @@ func TestKafkaMessagesAfterStart(t *testing.T) {
 	mock.latency = time.Millisecond * 5
 	defer testStopMockServer(t, mock)
 
-	r := testKafkaConnectEx(t, 21001, topics, 0, 0, 1024)
+	r := testKafkaConnectEx(t, 21001, topics, 0, 0, 1024, 0)
 	defer testCloseKafkaReader(t, tl, r)
 
 	time.Sleep(time.Millisecond * 250)
@@ -520,4 +522,46 @@ func TestKafkaMessagesAfterStart(t *testing.T) {
 
 	tl.Info("pulled all the events")
 	mock.FinishRequests()
+}
+
+func TestKafkaCommitOneGoBack(t *testing.T) {
+	topics := []string{"topic-a"}
+	tl, mock := testCreateKafkaMockServer(t, 21001, topics)
+	defer testStopMockServer(t, mock)
+
+	mock.SimplePost("topic-a", 2, nil, []byte("test"))
+
+	r := testKafkaConnectEx(t, 21001, topics, 0, 0, 1024, time.Millisecond*50)
+
+	m, err := r.FetchMessage(tl)
+	if err != nil {
+		t.Fatalf("kafka-feed: read message error: %v", err)
+	}
+
+	r.CommitMessages(tl, m) // asynchronous
+
+	for {
+		if strings.Contains(tl.EventsToString(), "cmd OffsetCommit v2") {
+			break
+		}
+		time.Sleep(time.Millisecond * 10)
+	}
+
+	tl.Infof("committed: %v", m)
+
+	// reopen client back at offset 0
+	testCloseKafkaReader(t, tl, r)
+	mock.SetConsumerGroupOffset(topics[0], 2, "kafka-mock", 0)
+	r = testKafkaConnectEx(t, 21001, topics, 0, 0, 1024, time.Millisecond*50)
+
+	m, err = r.FetchMessage(tl)
+	if err != nil {
+		t.Fatalf("kafka-feed: read message error: %v", err)
+	}
+	if m.Offset != 0 {
+		t.Error("wrong offset")
+	}
+
+	mock.FinishRequests()
+	testCloseKafkaReader(t, tl, r)
 }

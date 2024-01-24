@@ -184,3 +184,17 @@ func (km *KafkaMock) CreatePartitionTopics(topics []string, partition int) {
 		kt.createPartition(int32(partition))
 	}
 }
+
+// Directly manipulate the offset of a consumer group
+func (km *KafkaMock) SetConsumerGroupOffset(topic string, partition int, group string, offset int64) {
+	kt := km.ds.getTopic(topic)
+	if kt != nil {
+		kp := kt.getPartition(int32(partition))
+		if kp != nil {
+			kp.mu.Lock()
+			defer kp.mu.Unlock()
+
+			kp.GroupCommittedOffsets[group] = offset
+		}
+	}
+}
